@@ -1,0 +1,5 @@
+.idea
+venv
+__pycache__
+.pg_data
+conf.yaml

@@ -12,9 +12,7 @@ class User(Base):
     name = Column(String)
     surname = Column(String)
     time = Column(DateTime)
-
     character = Column(Integer, ForeignKey('characters.id'))
-    characters = relationship("Characters", back_populates="user")
 
 
 class Characters(Base):
@@ -25,4 +23,11 @@ class Characters(Base):
     open_ai_description = Column(String)
     img_path = Column(String)
 
-    user = relationship("User", back_populates="characters")
+
+class Messages(Base):
+    __tablename__ = "messages"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.user_id'))
+    character_id = Column(Integer, ForeignKey('characters.id'))
+    user_message = Column(String)
+    answer = Column(String)

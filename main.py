@@ -153,5 +153,6 @@ async def handle_message(message: Message):
         logging.error(f"Error: {error}")
     db.close()
 
+
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True, on_startup=on_startup)

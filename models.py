@@ -1,4 +1,3 @@
-from sqlalchemy.orm._orm_constructors import relationship
 from sqlalchemy.sql.schema import Column, ForeignKey
 from sqlalchemy.sql.sqltypes import DateTime, Integer, String
 

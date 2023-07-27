@@ -9,30 +9,10 @@ from conf import WEB_APP_HOST, WEB_APP_PORT, AMPLITUDE_API_KEY
 from storage import engine, Base, SessionLocal
 from models import Characters, User
 
+# app init
 app = Flask(__name__, static_folder="static")
+logging.basicConfig(level=logging.WARNING)
 
-Base.metadata.create_all(engine)
-
-
-# Amplitude events
-async def track_event(user_id, event_type, properties=None):
-    url = f"https://api.amplitude.com/2/httpapi"
-    data = {
-        "api_key": AMPLITUDE_API_KEY,
-        "events": [
-            {
-                "user_id": str(user_id),
-                "event_type": event_type,
-                "event_properties": properties
-            }
-        ]
-    }
-
-    try:
-        response = requests.post(url, json=data)
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        logging.error("Failed to track event: %s", e)
 
 # characters data adding
 async def check_start_data():
@@ -60,14 +40,49 @@ async def check_start_data():
     db.close()
 
 
+# on startup functions
+def on_startup():
+    # create all tables if they don't exist
+    Base.metadata.create_all(engine)
+    await check_start_data()
+
+
+# Amplitude events
+async def track_event(user_id, event_type, properties=None):
+    url = f"https://api.amplitude.com/2/httpapi"
+    data = {
+        "api_key": AMPLITUDE_API_KEY,
+        "events": [
+            {
+                "user_id": str(user_id),
+                "event_type": event_type,
+                "event_properties": properties
+            }
+        ]
+    }
+
+    try:
+        response = requests.post(url, json=data)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as error:
+        logging.error("Failed to track event: %s", error)
+
+
 @app.route('/')
 async def home():
+    # takes user_id from query params and give it to template
     user_id = request.args.get("user_id")
 
-    await check_start_data()
+    # trying to take all character data from db and give it to template
     db = SessionLocal()
+    try:
+        characters_db = db.query(Characters).all()
+    except Exception as error:
+        db.rollback()
+        logging.error("Failed to add character to user in db:", str(error))
+        abort(500)
+
     characters = []
-    characters_db = db.query(Characters).all()
     for character in characters_db:
         char = {
             "id": character.id,
@@ -82,9 +97,11 @@ async def home():
 
 @app.route('/character_select', methods=["POST"])
 async def char():
+    # takes user_id and character_id from form data
     current_user = request.form.get("user_id")
     character_id = request.form.get("char_id")
 
+    # track user character select event
     await track_event(current_user, 'character_select', {'character_id': character_id})
 
     db = SessionLocal()
@@ -93,8 +110,9 @@ async def char():
         user.character = character_id
         db.add(user)
         db.commit()
-    except Exception:
+    except Exception as error:
         db.rollback()
+        logging.error("Failed to add character to user in db:", str(error))
         abort(500)
     finally:
         db.close()

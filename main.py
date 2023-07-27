@@ -2,13 +2,14 @@ import datetime
 from time import sleep
 import logging
 import openai
+import requests
 from sqlalchemy import insert
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
 from sqlalchemy.exc import IntegrityError
 from aiogram.types.bot_command import BotCommand
 from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
-from conf import BOT_TOKEN, WEB_APP_URL, OPEN_API_TOKEN
+from conf import BOT_TOKEN, WEB_APP_URL, OPEN_API_TOKEN, AMPLITUDE_API_KEY
 from models import User, Characters, Messages
 from storage import SessionLocal, Base, engine
 
@@ -35,20 +36,46 @@ async def on_startup(dp):
 
 
 # openAI
-async def conversation_with_ai(user_message, character_description):
+async def conversation_with_ai(user_message, character_description, user_id):
     openai.api_key = OPEN_API_TOKEN
-    completion = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": f"You are {character_description}."},
-            {"role": "user", "content": f' In answer you must use language same as user.'
-                                        f'Give only full answer! '
-                                        f'Do not give dangerous information! '
-                                        f' message: {user_message}'}
-        ]
-    )
-
+    try:
+        completion = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": f"You are {character_description}."},
+                {"role": "user", "content": f' In answer you must use language same as user.'
+                                            f'Give only full answer! '
+                                            f'Do not give dangerous information! '
+                                            f' message: {user_message}'}
+            ]
+        )
+    except openai.error as error:
+        logging.error(f"OpenAI API error: {str(error)}")
+        await track_event(user_id, 'openAI_response_error', {'text': str(error)})
+        return "Прости, сейчас не могу говорить."
+    await track_event(user_id, 'openAI_response', {'text': completion['choices'][0]["message"]['content']})
     return completion['choices'][0]["message"]['content']
+
+
+# Amplitude events
+async def track_event(user_id, event_type, properties=None):
+    url = f"https://api.amplitude.com/2/httpapi"
+    data = {
+        "api_key": AMPLITUDE_API_KEY,
+        "events": [
+            {
+                "user_id": str(user_id),
+                "event_type": event_type,
+                "event_properties": properties
+            }
+        ]
+    }
+
+    try:
+        response = requests.post(url, json=data)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        logging.error("Failed to track event: %s", e)
 
 
 # handler /start
@@ -56,7 +83,7 @@ async def conversation_with_ai(user_message, character_description):
 async def handle_start(message: Message):
     # takes user information
     user = message.from_user
-
+    await track_event(message.from_user.id, 'start')
     user_data = {
         "user_id": user.id,
         "username": user.username,
@@ -110,6 +137,8 @@ async def handle_menu(message: Message):
     keyboard = InlineKeyboardMarkup().add(
         InlineKeyboardButton(text="Выбери персонажа", url=WEB_APP_URL + "?user_id=" + str(user_id)))
 
+    await track_event(message.from_user.id, 'menu')
+
     await bot.send_message(message["from"]["id"],
                            f"Привет! По ссылке ниже выбери с каким героем ты хочешь пообщаться сегодня!",
                            reply_markup=keyboard)
@@ -120,6 +149,9 @@ async def handle_menu(message: Message):
 async def handle_message(message: Message):
     if message.text[0] == "/":
         return
+
+    await track_event(message.from_user.id, 'user_message', {'text': message.text})
+
     user_id = message.from_user.id
     db = SessionLocal()
     user = db.query(User).filter(User.user_id == user_id).first()
@@ -136,8 +168,11 @@ async def handle_message(message: Message):
     user_message = message.text
 
     await bot.send_chat_action(message.chat.id, 'typing')
-    answer = await conversation_with_ai(user_message, char.open_ai_description)
+
+    answer = await conversation_with_ai(user_message, char.open_ai_description, user_id)
+
     await bot.send_message(message["from"]["id"], answer)
+
     new_message = {
         "user_id": user_id,
         "user_message": user_message,
@@ -150,8 +185,10 @@ async def handle_message(message: Message):
         db.commit()
     except Exception as error:
         db.rollback()
-        logging.error(f"Error: {error}")
+        logging.error(f"Error: {str(error)}")
     db.close()
+
+    await track_event(message.from_user.id, 'user_response', {'text': answer})
 
 
 if __name__ == '__main__':

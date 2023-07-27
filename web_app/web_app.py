@@ -1,5 +1,5 @@
 import requests
-from flask import abort, logging
+from flask import abort
 from flask.app import Flask
 from flask.globals import request
 from flask.templating import render_template
@@ -11,11 +11,10 @@ from models import Characters, User
 
 # app init
 app = Flask(__name__, static_folder="static")
-logging.basicConfig(level=logging.WARNING)
 
 
 # characters data adding
-async def check_start_data():
+def check_start_data():
     db = SessionLocal()
     existed_data = db.query(Characters).all()
     if not existed_data:
@@ -44,7 +43,7 @@ async def check_start_data():
 def on_startup():
     # create all tables if they don't exist
     Base.metadata.create_all(engine)
-    await check_start_data()
+    check_start_data()
 
 
 # Amplitude events
@@ -65,7 +64,7 @@ async def track_event(user_id, event_type, properties=None):
         response = requests.post(url, json=data)
         response.raise_for_status()
     except requests.exceptions.RequestException as error:
-        logging.error("Failed to track event: %s", error)
+        app.logger.error("Failed to track event: %s", error)
 
 
 @app.route('/')
@@ -77,20 +76,22 @@ async def home():
     db = SessionLocal()
     try:
         characters_db = db.query(Characters).all()
+        user_char_id = db.query(User).filter(User.user_id == user_id).first().character
     except Exception as error:
         db.rollback()
-        logging.error("Failed to add character to user in db:", str(error))
+        app.logger.error("Failed to add character to user in db:", str(error))
         abort(500)
 
     characters = []
     for character in characters_db:
-        char = {
-            "id": character.id,
-            "name": character.name,
-            "description": character.description,
-            "img_path": character.img_path,
-        }
-        characters.append(char)
+        if character.id != user_char_id:
+            char = {
+                "id": character.id,
+                "name": character.name,
+                "description": character.description,
+                "img_path": character.img_path,
+            }
+            characters.append(char)
     db.close()
     return render_template("characters.html", characters=characters, user_id=user_id)
 
@@ -112,7 +113,7 @@ async def char():
         db.commit()
     except Exception as error:
         db.rollback()
-        logging.error("Failed to add character to user in db:", str(error))
+        app.logger.error("Failed to add character to user in db:", str(error))
         abort(500)
     finally:
         db.close()
@@ -120,4 +121,5 @@ async def char():
 
 
 if __name__ == "__main__":
+    on_startup()
     app.run(host=WEB_APP_HOST, port=WEB_APP_PORT)

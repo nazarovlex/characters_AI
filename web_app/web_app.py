@@ -1,11 +1,11 @@
-from flask import abort
+import requests
+from flask import abort, logging
 from flask.app import Flask
 from flask.globals import request
 from flask.templating import render_template
 from flask.wrappers import Response
 from sqlalchemy.dialects.postgresql.dml import insert
-
-from conf import WEB_APP_HOST, WEB_APP_PORT
+from conf import WEB_APP_HOST, WEB_APP_PORT, AMPLITUDE_API_KEY
 from storage import engine, Base, SessionLocal
 from models import Characters, User
 
@@ -14,8 +14,28 @@ app = Flask(__name__, static_folder="static")
 Base.metadata.create_all(engine)
 
 
+# Amplitude events
+async def track_event(user_id, event_type, properties=None):
+    url = f"https://api.amplitude.com/2/httpapi"
+    data = {
+        "api_key": AMPLITUDE_API_KEY,
+        "events": [
+            {
+                "user_id": str(user_id),
+                "event_type": event_type,
+                "event_properties": properties
+            }
+        ]
+    }
+
+    try:
+        response = requests.post(url, json=data)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        logging.error("Failed to track event: %s", e)
+
 # characters data adding
-def check_start_data():
+async def check_start_data():
     db = SessionLocal()
     existed_data = db.query(Characters).all()
     if not existed_data:
@@ -41,10 +61,10 @@ def check_start_data():
 
 
 @app.route('/')
-def home():
+async def home():
     user_id = request.args.get("user_id")
 
-    check_start_data()
+    await check_start_data()
     db = SessionLocal()
     characters = []
     characters_db = db.query(Characters).all()
@@ -61,9 +81,11 @@ def home():
 
 
 @app.route('/character_select', methods=["POST"])
-def char():
+async def char():
     current_user = request.form.get("user_id")
     character_id = request.form.get("char_id")
+
+    await track_event(current_user, 'character_select', {'character_id': character_id})
 
     db = SessionLocal()
     try:

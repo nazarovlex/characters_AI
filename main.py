@@ -147,10 +147,26 @@ async def handle_menu(message: Message):
     # track user menus event
     await track_event(user_id, 'menu')
 
+    db = SessionLocal()
+    old_char_id = db.query(User).filter(User.user_id == user_id).first().character
+
     # create message with url button and send it to user
     keyboard = InlineKeyboardMarkup().add(Button(text="Выбери персонажа", url=WEB_APP_URL + "?user_id=" + str(user_id)))
     menu_welcome_message = f"Привет! По ссылке ниже выбери с каким героем ты хочешь пообщаться сегодня!"
+
     await bot.send_message(message["from"]["id"], menu_welcome_message, reply_markup=keyboard)
+
+    # check that user select a new character
+    while True:
+        sleep(5)
+        new_char_id = db.query(User).filter(User.user_id == user_id).first().character
+        if new_char_id != old_char_id:
+            char = db.query(Characters).filter(Characters.id == new_char_id).first()
+            await bot.send_message(message["from"]["id"], f"Привет! Меня зовут {char.name}! О чем хочешь поговорить?")
+            db.close()
+            break
+        else:
+            db.close()
 
 
 # handler text messages
@@ -166,10 +182,10 @@ async def handle_message(message: Message):
     # track user send message event
     await track_event(user_id, 'user_message', {'text': message.text})
 
+    # check user character
     db = SessionLocal()
     try:
-        user = db.query(User).filter(User.user_id == user_id).first()
-        char_id = user.character
+        char_id = db.query(User).filter(User.user_id == user_id).first().character
     except Exception as error:
         db.rollback()
         logging.error(f"Text handler db error: {str(error)}")
@@ -178,13 +194,13 @@ async def handle_message(message: Message):
 
     # check user character
     if not char_id:
-        query_params = "?user_id=" + str(user.id)
+        query_params = "?user_id=" + str(user_id)
         keyboard = InlineKeyboardMarkup().add(Button(text="Выбери персонажа", url=WEB_APP_URL + query_params))
         notice_message = "Чтобы начать общение, нужно выбрать персонажа."
-        await bot.send_message(message["from"]["id"], notice_message,reply_markup=keyboard)
+        await bot.send_message(message["from"]["id"], notice_message, reply_markup=keyboard)
 
     # take character information from db
-    char = db.query(Characters).filter(Characters.id == user.character).first()
+    char = db.query(Characters).filter(Characters.id == char_id).first()
 
     # make bot looks more like human
     await bot.send_chat_action(message.chat.id, 'typing')

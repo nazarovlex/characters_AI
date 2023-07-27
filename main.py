@@ -8,16 +8,15 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
 from sqlalchemy.exc import IntegrityError
 from aiogram.types.bot_command import BotCommand
-from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import Message, InlineKeyboardButton as Button, InlineKeyboardMarkup
 from conf import BOT_TOKEN, WEB_APP_URL, OPEN_API_TOKEN, AMPLITUDE_API_KEY
 from models import User, Characters, Messages
 from storage import SessionLocal, Base, engine
 
+# bot init
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 logging.basicConfig(level=logging.WARNING)
-
-Base.metadata.create_all(engine)
 
 
 # bot commands
@@ -30,8 +29,11 @@ async def set_commands():
     await bot.set_my_commands(commands)
 
 
-# commands menu activating
+# on startup functions
 async def on_startup(dp):
+    # create all tables in DB from models.py
+    Base.metadata.create_all(engine)
+    # create bot menu
     await set_commands()
 
 
@@ -83,7 +85,10 @@ async def track_event(user_id, event_type, properties=None):
 async def handle_start(message: Message):
     # takes user information
     user = message.from_user
+
+    # track user registrations event
     await track_event(message.from_user.id, 'start')
+
     user_data = {
         "user_id": user.id,
         "username": user.username,
@@ -100,25 +105,28 @@ async def handle_start(message: Message):
     try:
         db.execute(query)
         db.commit()
-
     except IntegrityError:
         pass
-    except Exception:
+    except Exception as error:
         db.rollback()
+        logging.error(f"Start handler db error: {str(error)}")
         await message.reply("Произошла ошибка. Повторите позже.")
     finally:
         db.close()
 
-    keyboard = InlineKeyboardMarkup().add(
-        InlineKeyboardButton(text="Выбери персонажа", url=WEB_APP_URL + "?user_id=" + str(user.id)))
+    # url button creating
+    query_params = "?user_id=" + str(user.id)
+    keyboard = InlineKeyboardMarkup().add(Button(text="Выбери персонажа", url=WEB_APP_URL + query_params))
 
-    await bot.send_message(message["from"]["id"],
-                           f"Привет! По ссылке ниже выбери с каким героем ты хочешь пообщаться сегодня!",
-                           reply_markup=keyboard)
+    # sending welcome message with url button
+    welcome_message = f"Привет! По ссылке ниже выбери с каким героем ты хочешь пообщаться сегодня!"
+    await bot.send_message(message["from"]["id"], welcome_message, reply_markup=keyboard)
 
+    db = SessionLocal()
+
+    # check that user select character
     while True:
         sleep(5)
-        db = SessionLocal()
         user = db.query(User).filter(User.user_id == user_data["user_id"]).first()
         if not user.character:
             db.close()
@@ -133,46 +141,62 @@ async def handle_start(message: Message):
 # handler /menu
 @dp.message_handler(commands=['menu'])
 async def handle_menu(message: Message):
+    # takes user_id
     user_id = message.from_user.id
-    keyboard = InlineKeyboardMarkup().add(
-        InlineKeyboardButton(text="Выбери персонажа", url=WEB_APP_URL + "?user_id=" + str(user_id)))
 
-    await track_event(message.from_user.id, 'menu')
+    # track user menus event
+    await track_event(user_id, 'menu')
 
-    await bot.send_message(message["from"]["id"],
-                           f"Привет! По ссылке ниже выбери с каким героем ты хочешь пообщаться сегодня!",
-                           reply_markup=keyboard)
+    # create message with url button and send it to user
+    keyboard = InlineKeyboardMarkup().add(Button(text="Выбери персонажа", url=WEB_APP_URL + "?user_id=" + str(user_id)))
+    menu_welcome_message = f"Привет! По ссылке ниже выбери с каким героем ты хочешь пообщаться сегодня!"
+    await bot.send_message(message["from"]["id"], menu_welcome_message, reply_markup=keyboard)
 
 
 # handler text messages
 @dp.message_handler(content_types=types.ContentType.TEXT)
 async def handle_message(message: Message):
+    # ignore all bot commands
     if message.text[0] == "/":
         return
 
-    await track_event(message.from_user.id, 'user_message', {'text': message.text})
-
+    # takes user_id
     user_id = message.from_user.id
+
+    # track user send message event
+    await track_event(user_id, 'user_message', {'text': message.text})
+
     db = SessionLocal()
-    user = db.query(User).filter(User.user_id == user_id).first()
-    char_id = user.character
+    try:
+        user = db.query(User).filter(User.user_id == user_id).first()
+        char_id = user.character
+    except Exception as error:
+        db.rollback()
+        logging.error(f"Text handler db error: {str(error)}")
+        await bot.send_message(message["from"]["id"], "Прости, сейчас не могу говорить.")
+        return
 
+    # check user character
     if not char_id:
-        keyboard = InlineKeyboardMarkup().add(
-            InlineKeyboardButton(text="Выбери персонажа", url=WEB_APP_URL + "?user_id=" + str(user_id)))
-        await bot.send_message(message["from"]["id"], f"Чтобы начать общение, нужно выбрать персонажа.",
-                               reply_markup=keyboard)
+        query_params = "?user_id=" + str(user.id)
+        keyboard = InlineKeyboardMarkup().add(Button(text="Выбери персонажа", url=WEB_APP_URL + query_params))
+        notice_message = "Чтобы начать общение, нужно выбрать персонажа."
+        await bot.send_message(message["from"]["id"], notice_message,reply_markup=keyboard)
 
+    # take character information from db
     char = db.query(Characters).filter(Characters.id == user.character).first()
 
-    user_message = message.text
-
+    # make bot looks more like human
     await bot.send_chat_action(message.chat.id, 'typing')
 
+    # take user message and make request to openAI
+    user_message = message.text
     answer = await conversation_with_ai(user_message, char.open_ai_description, user_id)
 
+    # give user answer from openAI
     await bot.send_message(message["from"]["id"], answer)
 
+    # create message object and try to insert in db
     new_message = {
         "user_id": user_id,
         "user_message": user_message,
@@ -185,9 +209,10 @@ async def handle_message(message: Message):
         db.commit()
     except Exception as error:
         db.rollback()
-        logging.error(f"Error: {str(error)}")
+        logging.error(f"Text handler db error: {str(error)}")
     db.close()
 
+    # track event that bot give user answer
     await track_event(message.from_user.id, 'user_response', {'text': answer})
 
 

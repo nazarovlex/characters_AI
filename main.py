@@ -86,6 +86,7 @@ async def handle_start(message: Message):
     # takes user information
     user = message.from_user
 
+
     # track user registrations event
     await track_event(message.from_user.id, 'start')
 
@@ -120,7 +121,7 @@ async def handle_start(message: Message):
 
     # sending welcome message with url button
     welcome_message = f"Привет! По ссылке ниже выбери с каким героем ты хочешь пообщаться сегодня!"
-    await bot.send_message(message["from"]["id"], welcome_message, reply_markup=keyboard)
+    await bot.send_message(message.from_user.id, welcome_message, reply_markup=keyboard)
 
     db = SessionLocal()
 
@@ -133,7 +134,7 @@ async def handle_start(message: Message):
             continue
         else:
             char_welcome_message = db.query(Characters).filter(Characters.id == user.character).first().welcome_message
-            await bot.send_message(message["from"]["id"], char_welcome_message)
+            await bot.send_message(message.from_user.id, char_welcome_message)
             db.close()
             break
 
@@ -154,7 +155,7 @@ async def handle_menu(message: Message):
     keyboard = InlineKeyboardMarkup().add(Button(text="Выбери персонажа", url=WEB_APP_URL + "?user_id=" + str(user_id)))
     menu_welcome_message = f"Привет! По ссылке ниже выбери с каким героем ты хочешь пообщаться сегодня!"
 
-    await bot.send_message(message["from"]["id"], menu_welcome_message, reply_markup=keyboard)
+    await bot.send_message(user_id, menu_welcome_message, reply_markup=keyboard)
 
     # check that user select a new character
     while True:
@@ -162,7 +163,7 @@ async def handle_menu(message: Message):
         new_char_id = db.query(User).filter(User.user_id == user_id).first().character
         if new_char_id != old_char_id:
             char_welcome_message = db.query(Characters).filter(Characters.id == new_char_id).first().welcome_message
-            await bot.send_message(message["from"]["id"], char_welcome_message)
+            await bot.send_message(user_id, char_welcome_message)
             db.close()
             break
         else:
@@ -189,7 +190,7 @@ async def handle_message(message: Message):
     except Exception as error:
         db.rollback()
         logging.error(f"Text handler db error: {str(error)}")
-        await bot.send_message(message["from"]["id"], "Прости, сейчас не могу говорить.")
+        await bot.send_message(user_id, "Прости, сейчас не могу говорить.")
         return
 
     # check user character
@@ -197,20 +198,20 @@ async def handle_message(message: Message):
         query_params = "?user_id=" + str(user_id)
         keyboard = InlineKeyboardMarkup().add(Button(text="Выбери персонажа", url=WEB_APP_URL + query_params))
         notice_message = "Чтобы начать общение, нужно выбрать персонажа."
-        await bot.send_message(message["from"]["id"], notice_message, reply_markup=keyboard)
+        await bot.send_message(user_id, notice_message, reply_markup=keyboard)
 
     # take character information from db
     char = db.query(Characters).filter(Characters.id == char_id).first()
 
     # make bot looks more like human
-    await bot.send_chat_action(message.chat.id, 'typing')
+    await bot.send_chat_action(user_id, 'typing')
 
     # take user message and make request to openAI
     user_message = message.text
     answer = await conversation_with_ai(user_message, char.open_ai_description, user_id)
 
     # give user answer from openAI
-    await bot.send_message(message["from"]["id"], answer)
+    await bot.send_message(user_id, answer)
 
     # create message object and try to insert in db
     new_message = {
@@ -229,7 +230,7 @@ async def handle_message(message: Message):
     db.close()
 
     # track event that bot give user answer
-    await track_event(message.from_user.id, 'user_response', {'text': answer})
+    await track_event(user_id, 'user_response', {'text': answer})
 
 
 if __name__ == '__main__':

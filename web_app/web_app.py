@@ -23,13 +23,15 @@ def check_start_data():
                 "name": "Mario",
                 "description": "Character",
                 "img_path": "static/images/mario.jpeg",
-                "open_ai_description": "Mario from Super Mario"
+                "open_ai_description": "Mario from Super Mario",
+                "welcome_message": "Привет! Я Марио из игры Super Mario! О чем хочешь пообщаться?",
             },
             {
                 "name": "Albert Einstein",
                 "description": "Theoretical physicist",
                 "img_path": "static/images/albert.jpeg",
-                "open_ai_description": "Albert Einstein"
+                "open_ai_description": "Albert Einstein",
+                "welcome_message": "Привет! Я Альберт Эйнштейн! Что хочешь узнать?"
             }
         ]
         for character in characters:

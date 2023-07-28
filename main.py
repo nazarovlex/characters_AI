@@ -132,8 +132,8 @@ async def handle_start(message: Message):
             db.close()
             continue
         else:
-            char = db.query(Characters).filter(Characters.id == user.character).first()
-            await bot.send_message(message["from"]["id"], f"Привет! Меня зовут {char.name}! О чем хочешь поговорить?")
+            char_welcome_message = db.query(Characters).filter(Characters.id == user.character).first().welcome_message
+            await bot.send_message(message["from"]["id"], char_welcome_message)
             db.close()
             break
 
@@ -161,8 +161,8 @@ async def handle_menu(message: Message):
         sleep(5)
         new_char_id = db.query(User).filter(User.user_id == user_id).first().character
         if new_char_id != old_char_id:
-            char = db.query(Characters).filter(Characters.id == new_char_id).first()
-            await bot.send_message(message["from"]["id"], f"Привет! Меня зовут {char.name}! О чем хочешь поговорить?")
+            char_welcome_message = db.query(Characters).filter(Characters.id == new_char_id).first().welcome_message
+            await bot.send_message(message["from"]["id"], char_welcome_message)
             db.close()
             break
         else:

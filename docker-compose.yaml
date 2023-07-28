@@ -9,6 +9,34 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: character_AI_bot
     ports:
-      - 5432:5432
+    - 5432:5432
     volumes:
-      - ./.pg_data/:/var/lib/postgresql/data
+    - ./.pg_data/:/var/lib/postgresql/data
+    networks:
+    - web
+
+  web_app:
+    build:
+      context: .
+      dockerfile: ../../.config/JetBrains/PyCharm2021.1/scratches/project/Dockerfile
+    restart: on-failure
+    ports:
+    - 5000:5000
+    networks:
+    - web
+    depends_on:
+    - postgres
+
+  telegram_bot:
+    build:
+      context: .
+      dockerfile: ../../.config/JetBrains/PyCharm2021.1/scratches/project/Dockerfile.bot
+    restart: on-failure
+    networks:
+    - web
+    depends_on:
+    - postgres
+
+networks:
+  web:
+    name: web

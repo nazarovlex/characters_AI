@@ -21,6 +21,7 @@ class Characters(Base):
     description = Column(String)
     open_ai_description = Column(String)
     img_path = Column(String)
+    welcome_message = Column(String)
 
 
 class Messages(Base):

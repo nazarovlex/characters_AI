@@ -86,6 +86,16 @@ async def handle_start(message: Message):
     # takes user information
     user = message.from_user
 
+    # create db session
+    db = SessionLocal()
+    user_exist = db.query(User).filter(User.user_id==user.id).first()
+    if user_exist and user_exist.character:
+        await bot.send_message(user.id, "Привет! о чем хочешь поговорить сегодня?")
+        return
+    elif user_exist:
+        await bot.send_message(user.id, "Вы уже заходили сюда. Вам нужно выбрать персонажа чтобы начать общение.")
+        return
+
 
     # track user registrations event
     await track_event(message.from_user.id, 'start')
@@ -98,8 +108,7 @@ async def handle_start(message: Message):
         "time": datetime.datetime.now()
     }
 
-    # create db session
-    db = SessionLocal()
+
 
     # create query with user info and try to insert into db
     query = insert(User).values(**user_data)

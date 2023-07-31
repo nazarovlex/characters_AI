@@ -37,7 +37,7 @@
             formData.append('user_id', "{{ user_id }}");
             formData.append('char_id', charId);
 
-            await fetch('http://0.0.0.0:5000/character_select', {
+            await fetch('http://{{ web_app_host }}:5000/character_select', {
                 method: 'POST',
                 body: formData
             });

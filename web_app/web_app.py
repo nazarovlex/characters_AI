@@ -5,7 +5,7 @@ from flask.globals import request
 from flask.templating import render_template
 from flask.wrappers import Response
 from sqlalchemy.dialects.postgresql.dml import insert
-from conf import WEB_APP_HOST, WEB_APP_PORT, AMPLITUDE_API_KEY
+from conf import AMPLITUDE_API_KEY, WEB_APP_HOST
 from storage import engine, Base, SessionLocal
 from models import Characters, User
 
@@ -95,7 +95,7 @@ async def home():
             }
             characters.append(char)
     db.close()
-    return render_template("characters.html", characters=characters, user_id=user_id)
+    return render_template("characters.html", characters=characters, user_id=user_id, web_app_host=WEB_APP_HOST)
 
 
 @app.route('/character_select', methods=["POST"])
@@ -124,4 +124,4 @@ async def char():
 
 if __name__ == "__main__":
     on_startup()
-    app.run(host=WEB_APP_HOST, port=WEB_APP_PORT)
+    app.run(host="0.0.0.0", port=5000)

@@ -1,4 +1,4 @@
-version: '3.9'
+version: '2.2'
 
 services:
   postgres:
@@ -18,7 +18,7 @@ services:
   web_app:
     build:
       context: .
-      dockerfile: ../../.config/JetBrains/PyCharm2021.1/scratches/project/Dockerfile
+      dockerfile: web_app/Dockerfile
     restart: on-failure
     ports:
     - 5000:5000
@@ -30,7 +30,7 @@ services:
   telegram_bot:
     build:
       context: .
-      dockerfile: ../../.config/JetBrains/PyCharm2021.1/scratches/project/Dockerfile.bot
+      dockerfile: Dockerfile.bot
     restart: on-failure
     networks:
     - web

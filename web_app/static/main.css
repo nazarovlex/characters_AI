@@ -2,6 +2,7 @@ body {
     width: 1080px;
     height: 1920px;
     background: #F5F5F5;
+
 }
 
 .card:hover, .card:active {
@@ -11,7 +12,7 @@ body {
 
 .card {
     width: 30%;
-    left:70%;
+    left: 70%;
     text-align: center;
     margin: 20px;
     padding: 20px;

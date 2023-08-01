@@ -1,0 +1,6 @@
+BOT_TOKEN: ""
+OPEN_API_TOKEN: ""
+AMPLITUDE_API_KEY: ""
+
+web_app_host: "127.0.0.1"
+web_app_port: 5000

@@ -23,7 +23,6 @@ logging.basicConfig(level=logging.WARNING)
 async def set_commands():
     commands = [
         BotCommand(command="/start", description="Начать"),
-        BotCommand(command="/help", description="Помощь"),
         BotCommand(command="/menu", description="Сменить персонажа"),
     ]
     await bot.set_my_commands(commands)
